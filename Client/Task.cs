@@ -18,7 +18,9 @@ namespace Client
         public void Execute(IServiceBus bus)
         {
             _serviceBus = bus;
+            
             Enabled = true;
+
             PublishNext();
         }
 
@@ -32,19 +34,22 @@ namespace Client
             if (!Enabled)
                 return;
 
-            var msg = new BasicRequest();
-            msg.CorrelationId = Guid.NewGuid();
+            var message = new BasicRequest {CorrelationId = Guid.NewGuid()};
+
             if (Published != null) Published(this, null);
-            _serviceBus.PublishRequest(msg, rc =>
+
+            _serviceBus.PublishRequest(message, rc =>
             {
                 rc.SetTimeout(30.Seconds());
                 rc.Handle<BasicResponse>(x =>
                 {
                     if (ResponseHandled != null) ResponseHandled(this, null);
-                    System.Threading.Thread.Sleep(2000);
-                    PublishNext();
+
+                    System.Threading.Thread.Sleep(1000);
                 });
             });
+
+            PublishNext();
         }
     }
 }

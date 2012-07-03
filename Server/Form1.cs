@@ -1,72 +1,64 @@
-﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
-using System.Drawing;
-using System.Linq;
-using System.Text;
-using System.Windows.Forms;
-using MassTransit;
-using Messages;
-
-namespace Server
+﻿namespace Server
 {
+    using System;
+    using System.Threading;
+    using System.Windows.Forms;
+    using MassTransit;
+
     public partial class Form1 : Form
     {
-
-        private IServiceBus bus;
+        IServiceBus bus;
+        SynchronizationContext _context;
 
         public Form1()
         {
             InitializeComponent();
-
-            
         }
 
-        private void button1_Click(object sender, EventArgs e)
+        void button1_Click(object sender, EventArgs e)
         {
-
         }
 
-        private void Form1_Load(object sender, EventArgs e)
+        void Form1_Load(object sender, EventArgs e)
         {
             richTextBox1.Text += "Starting...\r\n";
 
-            Type t = typeof(BasicConsumer);
+            _context = SynchronizationContext.Current;
 
             bus = ServiceBusFactory.New(sbc =>
-            {
-                sbc.UseRabbitMqRouting();
-                sbc.ReceiveFrom("rabbitmq://localhost/mtreqresptest_server");
-                sbc.SetConcurrentConsumerLimit(1);
-            });
-
-            var unsubscribeAction = bus.SubscribeConsumer(t, 
-                delegate
                 {
-                    richTextBox1.Text += "Subscribing consumer\r\n";
-                    // in my real app Ninject would resolve this
-                    BasicConsumer consumer = new BasicConsumer();
+                    sbc.UseRabbitMqRouting();
+                    sbc.ReceiveFrom("rabbitmq://localhost/mtreqresptest_server");
+                    sbc.SetConcurrentConsumerLimit(1);
 
-                    // When the handler is done is should raise the Completed event
-                    // Handle that here and send a response back to the task that initiated the request.
-                    consumer.Completed += (s, args) =>
-                    {
-                        richTextBox1.Text +=
-                            "Consumer completed, CorrelationId is " +
-                            args.CorrelationId + "\r\n";
+                    sbc.Subscribe(sc =>
+                        {
+                            sc.Consumer(() =>
+                                {
+                                    var consumer = new BasicConsumer();
+                                    consumer.Completed += ConsumerCompletedCallback;
 
-                        var resp = new BasicResponse() { CorrelationId = args.CorrelationId };
-                        bus.Context().Respond(resp);
-                    };
 
-                    return consumer;
+                                    return consumer;
+                                });
+                        });
                 });
+
+            richTextBox1.Text += "Started.\r\n";
         }
 
-        private void label1_Click(object sender, EventArgs e)
+        void ConsumerCompletedCallback(object source, CompletedEventArgs args)
         {
+            Guid correlationId = args.CorrelationId;
 
+            // you are on a MT thread, so you have to post back to your UI thread here or get an InvalidOperationException
+            // for cross-thread operations
+            _context.Post(
+                _ => { richTextBox1.Text += string.Format("Consumer completed, CorrelationId is {0}\r\n", correlationId); }, null);
+        }
+
+        void label1_Click(object sender, EventArgs e)
+        {
         }
     }
 }
