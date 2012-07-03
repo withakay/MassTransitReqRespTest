@@ -1,30 +1,34 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using MassTransit;
-using Messages;
-
-namespace Server
+﻿namespace Server
 {
+    using System;
+    using MassTransit;
+    using Messages;
+
     class CompletedEventArgs : EventArgs
     {
-        public Guid CorrelationId { get; set; }
         public CompletedEventArgs(Guid cid)
         {
             CorrelationId = cid;
         }
+
+        public Guid CorrelationId { get; set; }
     }
 
-    class BasicConsumer : Consumes<BasicRequest>.All
+    class BasicConsumer : 
+        Consumes<BasicRequest>.Context
     {
-        public event EventHandler<CompletedEventArgs> Completed;
-        public void Consume(BasicRequest message)
+        public void Consume(IConsumeContext<BasicRequest> context)
         {
             if (Completed != null)
             {
-                Completed(this, new CompletedEventArgs(message.CorrelationId));
+                Completed(this, new CompletedEventArgs(context.Message.CorrelationId));
             }
+
+            var response = new BasicResponse {CorrelationId = context.Message.CorrelationId};
+
+            context.Respond(response);
         }
+
+        public event EventHandler<CompletedEventArgs> Completed;
     }
 }
